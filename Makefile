@@ -1,9 +1,9 @@
-all: run
+all: build_dir build/boot.bin image.iso
 
 ISO_DIR = iso
 BUILD_DIR = build
 
-run: build_dir build/boot.bin image.iso
+run:
 	qemu-system-x86_64 -cdrom image.iso
 
 build_dir:
