@@ -1,7 +1,9 @@
-all: build_dir build/boot.bin image.iso
+all: build_dir build/boot.bin image.iso run
 
 ISO_DIR = iso
 BUILD_DIR = build
+
+BOOT_STAGE_INCLUDE = common
 
 run:
 	qemu-system-x86_64 -cdrom image.iso
@@ -16,7 +18,7 @@ image.iso:
 	xorriso -as mkisofs -R -J -b boot.bin -no-emul-boot -boot-load-size 4 -o $@ $(ISO_DIR)
 
 build/boot.bin: boot.asm
-	nasm -f bin -o $@ $<
+	nasm -f bin -I $(BOOT_STAGE_INCLUDE) -o $@ $<
 
 clean:
 	rm -rf $(BUILD_DIR)
