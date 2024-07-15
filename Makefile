@@ -14,6 +14,7 @@ build_dir:
 image.iso:
 	mkdir -p $(ISO_DIR)/
 	cp $(BUILD_DIR)/boot.bin $(ISO_DIR)/
+	cp ab.txt $(ISO_DIR)/
 
 	xorriso -as mkisofs -R -J -b boot.bin -no-emul-boot -boot-load-size 4 -o $@ $(ISO_DIR)
 
