@@ -1,10 +1,14 @@
 %ifndef __ISO_9660_INC__
 %define __ISO_9660_INC__
 
-%define VOLUME_DESCRIPTOR_READ_LOCATION 0x8000
+%define VOLUME_DESCRIPTOR_READ_LOCATION 0x0500;0x8000
+%define FILE_LOADING_AREA 0xB000
 
 Read_volume_descriptors:
-	pusha 		; save the state
+	pushad 		; save the state
+	mov si, sReadingVolumeDescriptorsStatement
+	call PrintString16BIOS
+	call PrintNewline
 .iterate_descriptor:
      xor eax, eax	; clear out the eax
      mov esi, eax	; clear out the esi
@@ -28,6 +32,14 @@ Read_volume_descriptors:
      jne .invalid_iso_disk
 
     ;; We got the valid iso disk identifier.
+    ; Print valid iso disk statement.
+    push si
+    mov si, sValidISODiskIdentifierString
+    call PrintString16BIOS
+    call PrintNewline
+    pop si
+    
+    ;; Location where the descriptor was read, load it in al.
     mov byte al, [VOLUME_DESCRIPTOR_READ_LOCATION]
     
     ; Print the Volume Descriptor Type
@@ -49,10 +61,12 @@ Read_volume_descriptors:
     ;; Read the Root Directory Entry from the PVD,
     ;; which is at offset 156.
     ;; Root Directory Entry is of 34 bytes.
-    mov si, 0x809c	; si = 0x8000 + 156
-    mov ax, es:[si + 2] ; Logical Block Address of the extent (first 4 bytes)
+    mov si, VOLUME_DESCRIPTOR_READ_LOCATION
+    add si, 156		; Offset 156, where the Root Directory Entry Structure is located.
+;    mov si, 0x809c	; si = 0x8000 + 156
+    mov dword eax, es:[si + 2] ; Logical Block Address of the extent (first 4 bytes)
     xor edx, edx
-    mov dx, ax		; Save LBA
+    mov edx, eax		; Save LBA
 
     ;; Read the Root Directory Entry at Location 0x9000
     mov ax, 0x0000
@@ -69,7 +83,8 @@ Read_volume_descriptors:
     ;; Read Root Directory Entry and Print its Entries Identifier.
     mov si, 0x9000	; Memory Address where the Root Directory Entries (Record)
     			; is read.
-    call Read_Root_Directory_Entry
+    call Find_and_Load_File_from_Root
+;    call Read_Root_Directory_Entry
    jmp .done_reading_volume_descriptor	; We are done reading and printing root directory entries.
 
 ;; Read the very next volume decriptor.
@@ -89,13 +104,13 @@ Read_volume_descriptors:
    call PrintString16BIOS		
 
 .done_reading_volume_descriptor:
-	popa		; restore the state
+	popad		; restore the state
 ret
 
 .invalid_iso_disk:
     ;; We got the Invalid ISO DISK
     ; Print the invalid statement and go to infinite loop
-    mov si, invalid_iso_disk
+    mov si, invalid_iso_disk_statement
     call PrintString16BIOS
     call PrintNewline
 jmp $
@@ -109,7 +124,7 @@ jmp $
 ; 	- SI Root Directory Entry
 ; **************************
 Read_Root_Directory_Entry:
-	pusha		; save the state
+	pushad		; save the state
 .iterate_entry:
 	xor ax, ax		; Clear out the ax register
 	mov byte al, es:[si]	; it points to the 0 offset in directory entry.
@@ -142,20 +157,22 @@ Read_Root_Directory_Entry:
 	add byte si, es:[si]	; jump to next directory entry by adding
 				; the length of the current directory entry.
 	jmp .iterate_entry
-	
-	
-	
 
 .reading_done:
-	popa 	; restore the state
+	popad 	; restore the state
 ret
+
 
 
 dwVolumeDescriptorStartingSector dd 16	;; starting sector where the volume descriptor resides.
 
-invalid_iso_disk: db 'Invalid ISO disk identifier.', 0
+invalid_iso_disk_statement: db 'Invalid ISO disk identifier.', 0
 volume_descriptor_terminator_encountered: db 'Volume Descriptor Set Terminator Encountered.', 0
+sReadingVolumeDescriptorsStatement: db 'Reading Volume Descriptors...', 0
+sValidISODiskIdentifierString: db 'It`s valid ISO Disk Identifier.', 0
 sVolumeDescriptorTypeStatement: db 'Volume Descriptor Type = ', 0
-sGotPVDStatement: db 'Got the PVD.', 0
+sGotPVDStatement: db 'We got the PVD.', 0
 
+;sItsDirectoryStatement: db 'Its a directory.', 0
+iso_id db 'CD001'
 %endif
