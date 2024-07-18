@@ -298,6 +298,7 @@ Find_and_Load_File_from_Root:
 	mov edx, 2048	; Sector sizes in bytes (1 sector = 2048 in ISO 9660)
 	call ReadFromDiskUsingExtendedBIOSFunction
 
+jmp FILE_LOADING_AREA
 
 	;; Tell user about displaying the content of the file.
 	mov si, sPrintingTheFileContent
@@ -358,7 +359,7 @@ sFindAndLoadFileStatement: db 'Find and Load the file.', 0
 sFoundTheFile: db 'Found the file.', 0
 sPrintingTheFileContent: db 'Printing the content of the file.', 0
 sDidntFindTheFile: db 'Didnt find the file.', 0
-file_identifier: db 'AB.TXT', 0
+file_identifier: db 'KERNEL.BIN', 0	;'AB.TXT', 0
 
 
 
