@@ -3,6 +3,7 @@
 
 %define VOLUME_DESCRIPTOR_READ_LOCATION 0x0500;0x8000
 %define FILE_LOADING_AREA 0xB000
+%define ROOT_DIRECTORY_ENTRY_LOCATION 0x9000
 
 Read_volume_descriptors:
 	pushad 		; save the state
@@ -71,7 +72,7 @@ Read_volume_descriptors:
     ;; Read the Root Directory Entry at Location 0x9000
     mov ax, 0x0000
     mov es, ax
-    mov bx, 0x9000
+    mov bx, ROOT_DIRECTORY_ENTRY_LOCATION ;0x9000
     
     mov eax, edx	; starting sector low 32 bit (0-indexed LBA)
     mov esi, 0		; starting sector high 32 bit
@@ -81,7 +82,7 @@ Read_volume_descriptors:
     call ReadFromDiskUsingExtendedBIOSFunction
 
     ;; Read Root Directory Entry and Print its Entries Identifier.
-    mov si, 0x9000	; Memory Address where the Root Directory Entries (Record)
+    mov si, ROOT_DIRECTORY_ENTRY_LOCATION  ; 0x9000	; Memory Address where the Root Directory Entries (Record)
     			; is read.
     call Find_and_Load_File_from_Root
 ;    call Read_Root_Directory_Entry
@@ -100,11 +101,12 @@ Read_volume_descriptors:
 
 ;; Volume Descriptor Set Terminator
 .volume_descriptor_terminator:
-   mov si, volume_descriptor_terminator_encountered
-   call PrintString16BIOS		
+	mov si, volume_descriptor_terminator_encountered
+	call PrintString16BIOS		
 
 .done_reading_volume_descriptor:
 	popad		; restore the state
+; end of Read_volume_descriptors function.
 ret
 
 .invalid_iso_disk:
@@ -161,6 +163,200 @@ Read_Root_Directory_Entry:
 .reading_done:
 	popad 	; restore the state
 ret
+
+
+; **************************
+; Reads the Root Directory Entry which should be pointed
+; by `SI`. It scans all the entries of the root directory
+; and prints the identifier(name) of one and all.
+; IN:
+; 	- SI Root Directory Entry
+; LOCAL VARIABLE:
+;	VAR1 = [bp - 4] = Address of the Current Directory entry.
+;	VAR2 = [bp - 8] = Found file LBA.
+; **************************
+Find_and_Load_File_from_Root:
+	pusha		; save the state
+	push bp		; Save old base pointer
+	mov bp, sp	; Set new base pointer
+	sub sp, 8	; Allocate 8 bytes for local variables
+			; 2 local variables of size 4 bytes each
+	mov word [bp - 4], si	; store the address of first entry
+				; of Root Directory Entries.
+
+	; Print the function job message
+	; SI - is needy for the function so push the initial state into the stack
+	; and pop after printing the string. Thus storing the initial value.
+	push si
+	mov si, sFindAndLoadFileStatement
+	call PrintString16BIOS
+	call PrintNewline
+	pop si
+
+.iterate_entry:
+
+	xor ax, ax		; Clear out the ax register
+	mov byte al, es:[si]	; it points to the 0 offset in directory entry.
+				; At Offset 0 is length of the record.
+				; It should be non zero, if zero means no valid record.
+	test al, al
+	
+	jz .didnt_find		; Reached the end of the directory entry list
+				; and didnt find the file
+	
+	;; It is valid directory record.
+
+	; Get the File Flags field (offset 25 from the start of the entry).
+	mov byte al, [si + 25]
+	; Check if it's a directory
+	test al, 0x02	; Check if bit 1 is set
+	jnz .is_directory
+
+	;; It is a file
+	
+	;; Check it's identifier.
+	xor cx, cx	; clear out cx
+	xor dx, dx	; clear out dx
+	mov byte cl, es:[si + 32]	; get the file identifier length,
+					; which is at offset 32 of directory_entry_record.
+	mov byte dx, cx			; Store the identifier length
+					; into the DX.
+
+	;; Check the file identifier
+	mov di, si	; DI and SI points to the Directory Entry Record
+	add di, 33	; add offset 33, which is the start of the file identifier
+			; DI, now points to the file identifier beginning.
+	mov cx, 6	; The length of the file identifier.
+	lea si, [file_identifier]	; Load SI to the identifier of the required file.
+	repe cmpsb	; Keep checking the SI and DI for the match.
+			; if the length of the file identifier in both DI and SI matches,
+			; then we have the required file, else jump to the next
+			; directory entry record.
+	jne .onto_next	; Jump to the next directory record if file identifier of
+			; particular size mismatch
+
+	;; Found the file
+
+	mov si, [bp-4]	; Store the current Directory Entry Record in the Local variable.
+
+.got_file:
+	;; got the file
+	; Print the message claiming that we found the file, you searched for.
+	push si
+	mov si, sFoundTheFile
+	call PrintString16BIOS
+	call PrintNewline
+	pop si
+
+	;; Location of the extent of the File
+	; i.e the LBA of the data of the file.
+	mov eax, es:[si + 2] ; Logical Block Address of the extent (first 4 bytes)
+
+	;; Save LBA
+	;; Store File LBA in local variable BP - 8
+	mov dword [bp - 8], eax		; Store the File LBA
+					; to second local variable.
+
+	; Read the file at the FILE_LOADING AREA which is
+	; 0x0500
+	mov ax, 0x0000
+	mov es, ax		; Zero the extra segment.
+	mov bx, FILE_LOADING_AREA ; 0x0500
+
+	mov byte ax, [si+ 10]	; Data length of the file in LSB
+				; It is present at offset 10 of Directory Entry Record.
+				; It is of 4 byte in size
+				; and data length is in bytes.
+	;; Prints the Data length
+	; push si
+	; mov si, sLengthOfFileIdentifierStatement
+	; call PrintString16BIOS
+	; call PrintWordNumber
+	; call PrintNewline
+	; pop si
+
+	;; Roundoff the size to the 2048 which is the sector size.
+	; i.e if the data length is less than 2048, then sector to load should be
+	; 1 which is 2048 bytes
+	; If the data length is more than 2048, 2049 for instance, one more than 2048
+	; then the sector to load will be 2 (2048*2)bytes.
+	; Now eax, consists the rounded off value to sector size
+	add eax, 2047
+	mov ecx, 2048
+	div ecx		; division also affect the edx register.
+			; so be careful, if you have stored the necessary
+			; information in edx, it must have got wiped out.
+	; move the sector count to ecx.
+	mov ecx, eax
+
+	mov eax, [bp - 8]	; starting sector low 32 bit (0-indexed LBA)
+				; fetch from the second local variable.
+	mov esi, 0	; starting sector high 32 bit
+	; mov ecx, 1	; Here you can explicitly specify the sector count,
+			; Otherwise we already calculated the rounded off
+			; sector count to sector size based on the data length.
+	mov edx, 2048	; Sector sizes in bytes (1 sector = 2048 in ISO 9660)
+	call ReadFromDiskUsingExtendedBIOSFunction
+
+	;; Tell user about displaying the content of the file.
+	mov si, sPrintingTheFileContent
+	call PrintString16BIOS
+	call PrintNewline
+
+	;; Print the contents of the file.
+	mov si, FILE_LOADING_AREA	; 0x0500
+					; Prints the data from the 
+					; file loaded area.
+	call PrintString16BIOS
+	call PrintNewline
+
+	; We are done here reading the contents of the file.
+	jmp .reading_done
+
+.is_directory:
+	; handle the directory, for the time being, just jump to next entry.
+	; Maybe you can recursively search for the file in every directory.
+	; Or you can search for particular directory.
+
+;; Update the si to point to next entry.
+.onto_next:
+	; load the base address of current entry back to si
+	mov word si, [bp - 4]
+
+	add byte si, es:[si]	; increment si to point to next entry
+				; Increment by adding the size of current entry.
+				; at offset 0 of directory entry, we have the size
+				; of each directory entry. we can get to the second
+				; entry by adding the size of current entry to the
+				; current entry address.
+	mov word [bp - 4], si	; update the next entry address in the local
+				; variable as well.
+	jmp .iterate_entry	; onto the next entry.
+
+;; Sorry but we didnt find your file.
+.didnt_find:
+	mov si, sDidntFindTheFile
+	call PrintString16BIOS
+	call PrintNewline
+
+.reading_done:
+	add sp, 8	; Clear local variables
+	mov sp, bp	; Reset Stack pointer
+	pop bp		; Restore old base pointer
+	popa 	; restore the state
+;; End of the Find_and_Load_File_from_Root function
+ret
+
+
+
+;; Data for the Find_and_Load_File_from_Root function
+sLengthOfFileIdentifierStatement: db 'Length of the File Identifier is (in bytes): ', 0
+sUnpaddedSizeStatement: db 'Un-Padded Size of Bootloader (bytes): ', 0
+sFindAndLoadFileStatement: db 'Find and Load the file.', 0
+sFoundTheFile: db 'Found the file.', 0
+sPrintingTheFileContent: db 'Printing the content of the file.', 0
+sDidntFindTheFile: db 'Didnt find the file.', 0
+file_identifier: db 'AB.TXT', 0
 
 
 

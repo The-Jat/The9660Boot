@@ -1,1 +1,3 @@
-HI
+HI, TheJat.
+
+You just read me from the ISO9660.
