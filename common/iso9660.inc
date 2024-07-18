@@ -261,7 +261,7 @@ Find_and_Load_File_from_Root:
 	; 0x0500
 	mov ax, 0x0000
 	mov es, ax		; Zero the extra segment.
-	mov bx, FILE_LOADING_AREA ; 0x0500
+	mov bx, FILE_LOADING_AREA ; 0xB000
 
 	mov byte ax, [si+ 10]	; Data length of the file in LSB
 				; It is present at offset 10 of Directory Entry Record.
@@ -269,7 +269,7 @@ Find_and_Load_File_from_Root:
 				; and data length is in bytes.
 	;; Prints the Data length
 	; push si
-	; mov si, sLengthOfFileIdentifierStatement
+	; mov si, sLengthOfFile
 	; call PrintString16BIOS
 	; call PrintWordNumber
 	; call PrintNewline
@@ -298,13 +298,14 @@ Find_and_Load_File_from_Root:
 	mov edx, 2048	; Sector sizes in bytes (1 sector = 2048 in ISO 9660)
 	call ReadFromDiskUsingExtendedBIOSFunction
 
+
 	;; Tell user about displaying the content of the file.
 	mov si, sPrintingTheFileContent
 	call PrintString16BIOS
 	call PrintNewline
 
 	;; Print the contents of the file.
-	mov si, FILE_LOADING_AREA	; 0x0500
+	mov si, FILE_LOADING_AREA	; 0xB000
 					; Prints the data from the 
 					; file loaded area.
 	call PrintString16BIOS
@@ -351,6 +352,7 @@ ret
 
 ;; Data for the Find_and_Load_File_from_Root function
 sLengthOfFileIdentifierStatement: db 'Length of the File Identifier is (in bytes): ', 0
+sLengthOfFile: db 'Length of the File (in bytes): ', 0
 sUnpaddedSizeStatement: db 'Un-Padded Size of Bootloader (bytes): ', 0
 sFindAndLoadFileStatement: db 'Find and Load the file.', 0
 sFoundTheFile: db 'Found the file.', 0
