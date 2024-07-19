@@ -26,8 +26,11 @@ build/boot.bin: boot.asm
 build/kernel.bin: kernel.asm
 	nasm -f bin -o $@ $<
 
-utilities:
-	$(MAKE) -C utilities
+ISO9660:
+	$(MAKE) -C utilities ISO9660
+
+ISO9660_run:
+	$(MAKE) -C utilities run
 
 clean:
 	rm -rf $(BUILD_DIR)

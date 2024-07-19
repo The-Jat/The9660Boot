@@ -1,7 +1,8 @@
-.PHONY: all clean
+.PHONY: all ISO9660 clean run
 
 all: build_dir build/Read9660
 
+ISO9660: build_dir build/Read9660
 
 build_dir:
 	mkdir -p build
