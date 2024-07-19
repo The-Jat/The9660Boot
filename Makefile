@@ -1,3 +1,4 @@
+.PHONY: utilities
 all: build_dir build/boot.bin build/kernel.bin image.iso run
 
 ISO_DIR = iso
@@ -25,7 +26,11 @@ build/boot.bin: boot.asm
 build/kernel.bin: kernel.asm
 	nasm -f bin -o $@ $<
 
+utilities:
+	$(MAKE) -C utilities
+
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(ISO_DIR)
 	rm -rf image.iso
+	$(MAKE) -C utilities clean 
